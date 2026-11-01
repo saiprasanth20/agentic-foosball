@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoFoos — Autonomous Multi-Agent Table Soccer</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(18, 24, 38, 0.88);
+      --border: #26334d;
+      --blue: #388bfd;
+      --red: #f85149;
+      --green: #2ea043;
+      --accent: #00ffd5;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 50% 20%, #151f33 0%, var(--bg) 75%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .glass-panel {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Top Dashboard */
+    .dashboard {
+      width: 840px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      margin-bottom: 16px;
+    }
+
+    .team-badge { display: flex; flex-direction: column; gap: 3px; }
+    .team-title { font-size: 13px; font-weight: 800; letter-spacing: 0.5px; }
+    .team-directive { font-size: 12px; color: var(--text-muted); }
+
+    .score-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+    }
+    .score-digits { font-size: 32px; font-weight: 900; letter-spacing: 4px; }
+    .series-banner { font-size: 11px; color: #ffd33d; font-family: monospace; font-weight: bold; }
+
+    .controls { display: flex; align-items: center; gap: 8px; }
+
+    button {
+      outline: none;
+      border: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    button:active { transform: scale(0.96); }
+
+    #btnPlay { background: var(--green); color: #fff; }
+    #btnPlay.running { background: #cf222e; }
+
+    #btnReset {
+      background: #21262d;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    #btnReset:hover { background: #30363d; }
+
+    /* Speed Control Pill Group */
+    .speed-group {
+      display: flex;
+      background: #161b22;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 3px;
+      margin-left: 6px;
+    }
+    .speed-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      border-radius: 6px;
+    }
+    .speed-btn.active {
+      background: #30363d;
+      color: var(--accent);
+      font-weight: 800;
+    }
+
+    /* Pitch Viewport */
+    .pitch-container {
+      position: relative;
+      padding: 16px;
+      background: #2b1708;
+      border-radius: 12px;
+      box-shadow: 0 24px 50px rgba(0,0,0,0.85);
+      border: 3px solid #4a2c13;
+    }
+
+    canvas {
+      border-radius: 4px;
+      display: block;
+      background: #1b6827;
+    }
+
+    /* Bottom Status Dock */
+    .status-dock {
+      width: 840px;
+      margin-top: 16px;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .status-indicator { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #da3633; }
+    .status-dot.active { background: #3fb950; box-shadow: 0 0 8px #3fb950; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Glass HUD -->
+  <div class="dashboard glass-panel">
+    <div class="team-badge">
+      <span class="team-title" style="color: var(--blue);">BLUE TACTICAL</span>
+      <span class="team-directive" id="blueDirective">"Push high line"</span>
+    </div>
+
+    <div class="score-center">
+      <div class="score-digits">
+        <span style="color: var(--blue);" id="scoreBlue">0</span>
+        <span style="color: var(--text-muted);">:</span>
+        <span style="color: var(--red);" id="scoreRed">0</span>
+      </div>
+      <div class="series-banner" id="seriesText">MATCH #1 | SERIES: 0 - 0 (FIRST TO 10)</div>
+    </div>
+
+    <div class="team-badge" style="text-align: right;">
+      <span class="team-title" style="color: var(--red);">RED TACTICAL</span>
+      <span class="team-directive" id="redDirective">"Lock central corridor"</span>
+    </div>
+
+    <div class="controls">
+      <button id="btnPlay" onclick="togglePlay()">▶ Start</button>
+      <button id="btnReset" onclick="resetMatch()">⟳ Reset</button>
+      <div class="speed-group">
+        <button class="speed-btn active" id="spd1" onclick="setSpeed(1)">1x</button>
+        <button class="speed-btn" id="spd2" onclick="setSpeed(2)">2x</button>
+        <button class="speed-btn" id="spd5" onclick="setSpeed(5)">5x</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pitch Canvas -->
+  <div class="pitch-container">
+    <canvas id="pitchCanvas" width="700" height="480"></canvas>
+  </div>
+
+  <!-- Bottom Telemetry Dock -->
+  <div class="status-dock glass-panel">
+    <div class="status-indicator">
+      <div class="status-dot" id="connDot"></div>
+      <span id="connLabel">Connecting to backend server...</span>
+    </div>
+    <div>Hotkeys: <strong>[SPACE] Play/Pause</strong> | <strong>[1, 2, 5] Speed</strong></div>
+    <div>Stream: <strong id="fpsLabel">60 FPS</strong></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("pitchCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // Automatically detects localhost vs production https/wss
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host || "localhost:8000";
+    const ws = new WebSocket(`${protocol}//${host}/ws`);
+
+    const btnPlay = document.getElementById("btnPlay");
+    const connDot = document.getElementById("connDot");
+    const connLabel = document.getElementById("connLabel");
+
+    let currentSpeed = 1;
+
+    ws.onopen = () => {
+      connDot.classList.add("active");
+      connLabel.innerText = "Engine Ready • Standby";
+    };
+
+    ws.onclose = () => {
+      connDot.classList.remove("active");
+      connLabel.innerText = "Disconnected from backend server";
+    };
+
+    ws.onmessage = (event) => {
+      const state = JSON.parse(event.data);
+
+      // Play/Pause State Sync
+      if (state.is_running) {
+        btnPlay.innerText = "⏸ Pause";
+        btnPlay.classList.add("running");
+        connLabel.innerText = `Simulation Running (${state.sim_speed}x Speed)`;
+      } else {
+        btnPlay.innerText = "▶ Start";
+        btnPlay.classList.remove("running");
+        connLabel.innerText = "System Standby • Click Start to Resume";
+      }
+
+      // Synchronize Active Speed Highlight
+      updateSpeedPills(state.sim_speed);
+
+      // Update HUD Values
+      document.getElementById("scoreBlue").innerText = state.score.blue;
+      document.getElementById("scoreRed").innerText = state.score.red;
+      document.getElementById("seriesText").innerText =
+        `MATCH #${state.series.match} | SERIES: ${state.series.blue} - ${state.series.red} (FIRST TO 10)`;
+
+      document.getElementById("blueDirective").innerText = `"${state.tactics.blue.directive}"`;
+      document.getElementById("redDirective").innerText = `"${state.tactics.red.directive}"`;
+
+      renderPitch(state);
+    };
+
+    function togglePlay() {
+      ws.send(JSON.stringify({ action: "TOGGLE_PLAY" }));
+    }
+
+    function resetMatch() {
+      ws.send(JSON.stringify({ action: "RESET" }));
+    }
+
+    function setSpeed(spd) {
+      currentSpeed = spd;
+      ws.send(JSON.stringify({ action: "SET_SPEED", speed: spd }));
+      updateSpeedPills(spd);
+    }
+
+    function updateSpeedPills(spd) {
+      document.getElementById("spd1").classList.toggle("active", spd === 1);
+      document.getElementById("spd2").classList.toggle("active", spd === 2);
+      document.getElementById("spd5").classList.toggle("active", spd === 5);
+    }
+
+    // Hotkey Controls (Spacebar for Play/Pause, 1/2/5 for Speed)
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === "1") {
+        setSpeed(1);
+      } else if (e.key === "2") {
+        setSpeed(2);
+      } else if (e.key === "5") {
+        setSpeed(5);
+      }
+    });
+
+    function renderPitch(state) {
+      // 1. Lawn Stripes
+      for (let x = 0; x < 700; x += 70) {
+        ctx.fillStyle = (x / 70) % 2 === 0 ? "#248232" : "#1e6d29";
+        ctx.fillRect(x, 0, 70, 480);
+      }
+
+      // 2. Markings
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, 0, 700, 480);
+
+      ctx.beginPath();
+      ctx.moveTo(350, 0); ctx.lineTo(350, 480);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(350, 240, 52, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(350, 240, 3, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+
+      // Goals
+      ctx.fillStyle = "#0c1017";
+      ctx.fillRect(0, 150, 6, 180);
+      ctx.fillRect(694, 150, 6, 180);
+
+      // 3. Rods & Sculpted Figures
+      state.rods.forEach((rod) => {
+        // Shadow
+        ctx.fillStyle = "rgba(10, 30, 15, 0.35)";
+        ctx.fillRect(rod.x + 6, 0, 5, 480);
+
+        // Steel Bar
+        ctx.fillStyle = "#9aa0a6";
+        ctx.fillRect(rod.x - 2, 0, 4, 480);
+        ctx.fillStyle = "#e8eaed";
+        ctx.fillRect(rod.x, 0, 1.5, 480);
+
+        const cosRot = Math.cos((rod.rotation * Math.PI) / 180);
+        const figHeight = Math.max(8, Math.round(24 * cosRot));
+        const yOffset = Math.round((24 - figHeight) / 2);
+
+        for (let i = 0; i < rod.num_players; i++) {
+          const figY = rod.base_y + i * rod.spacing + yOffset;
+
+          // Shadow
+          ctx.fillStyle = "rgba(10, 30, 15, 0.45)";
+          ctx.beginPath();
+          ctx.roundRect(rod.x - 4, figY + 5, 14, figHeight, [4]);
+          ctx.fill();
+
+          // Figure Body
+          ctx.fillStyle = rod.team === "BLUE" ? "#1f6feb" : "#da3633";
+          ctx.beginPath();
+          ctx.roundRect(rod.x - 7, figY, 14, figHeight, [4]);
+          ctx.fill();
+
+          // Highlight
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(rod.x, figY + 8, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // 4. Ball with Drop Shadow
+      ctx.fillStyle = "rgba(10, 30, 15, 0.5)";
+      ctx.beginPath();
+      ctx.ellipse(state.ball.x + 3, state.ball.y + 4, 8, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#f0f6fc";
+      ctx.beginPath();
+      ctx.arc(state.ball.x, state.ball.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(state.ball.x - 2, state.ball.y - 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  </script>
+</body>
+</html>

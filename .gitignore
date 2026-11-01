@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+tournament_telemetry_*.json
+match_telemetry_*.json
