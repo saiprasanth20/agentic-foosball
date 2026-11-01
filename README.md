@@ -7,3 +7,4 @@
 
 > **Live Demo:** [https://agentic-foosball-1.onrender.com/](https://agentic-foosball-1.onrender.com/)
 <img width="400" height="286" alt="Foos game gif" src="https://github.com/user-attachments/assets/2c817a16-7bcf-4fd9-9ed3-61946e1205f6" />
+Note: Hosted on Render Free Tier. Please allow ~45 seconds for cold start on first load.
